@@ -13,7 +13,7 @@ const JuliaSetGenerator: React.FC = () => {
   const [maxIterations, setMaxIterations] = useState(300);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
-  const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
+  const lastPinchDistance = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -116,18 +116,13 @@ const JuliaSetGenerator: React.FC = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
+    const handleZoom = (zoomFactor: number, zoomCenter: { x: number, y: number }) => {
       const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
       const zoomPoint = {
-        x: (mouseX / canvas.width) * 2 - 1,
-        y: -((mouseY / canvas.height) * 2 - 1)
+        x: ((zoomCenter.x - rect.left) / canvas.width) * 2 - 1,
+        y: -(((zoomCenter.y - rect.top) / canvas.height) * 2 - 1)
       };
 
-      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(1e-10, Math.min(zoom * zoomFactor, 1e10));
 
       const newCenter = {
@@ -137,6 +132,12 @@ const JuliaSetGenerator: React.FC = () => {
 
       setCenter(newCenter);
       setZoom(newZoom);
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      handleZoom(zoomFactor, { x: e.clientX, y: e.clientY });
     };
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -150,7 +151,7 @@ const JuliaSetGenerator: React.FC = () => {
         const dx = (e.clientX - lastMousePos.current.x);
         const dy = (e.clientY - lastMousePos.current.y);
         
-        const panSpeed = 2;
+        const panSpeed = 1.8;
         setCenter(prev => ({
           x: prev.x + dx / canvas.width * 2 * panSpeed,
           y: prev.y - dy / canvas.height * 2 * panSpeed
@@ -172,8 +173,7 @@ const JuliaSetGenerator: React.FC = () => {
       } else if (e.touches.length === 2) {
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        const distance = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
-        setLastTouchDistance(distance);
+        lastPinchDistance.current = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
       }
     };
 
@@ -184,55 +184,42 @@ const JuliaSetGenerator: React.FC = () => {
         const dx = (touch.clientX - lastMousePos.current.x);
         const dy = (touch.clientY - lastMousePos.current.y);
         
-        const panSpeed = 2 / zoom;
+        const panSpeed = 1.8;
         setCenter(prev => ({
           x: prev.x - dx / canvas.width * 2 * panSpeed,
           y: prev.y + dy / canvas.height * 2 * panSpeed
         }));
         
         lastMousePos.current = { x: touch.clientX, y: touch.clientY };
-      } else if (e.touches.length === 2 && lastTouchDistance !== null) {
+      } else if (e.touches.length === 2 && lastPinchDistance.current !== null) {
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        const newDistance = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+        const newPinchDistance = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
         
-        const zoomFactor = newDistance / lastTouchDistance;
-        const newZoom = Math.max(1e-10, Math.min(zoom * zoomFactor, 1e10));
-
+        const zoomFactor = newPinchDistance / lastPinchDistance.current;
         const zoomCenter = {
           x: (touch1.clientX + touch2.clientX) / 2,
           y: (touch1.clientY + touch2.clientY) / 2
         };
 
-        const rect = canvas.getBoundingClientRect();
-        const zoomPoint = {
-          x: ((zoomCenter.x - rect.left) / canvas.width) * 2 - 1,
-          y: -(((zoomCenter.y - rect.top) / canvas.height) * 2 - 1)
-        };
-
-        const newCenter = {
-          x: center.x + (zoomPoint.x - center.x) * (1 - zoomFactor),
-          y: center.y + (zoomPoint.y - center.y) * (1 - zoomFactor)
-        };
-
-        setCenter(newCenter);
-        setZoom(newZoom);
-        setLastTouchDistance(newDistance);
+        handleZoom(zoomFactor, zoomCenter);
+        
+        lastPinchDistance.current = newPinchDistance;
       }
     };
 
     const handleTouchEnd = () => {
       isDragging.current = false;
-      setLastTouchDistance(null);
+      lastPinchDistance.current = null;
     };
 
-    canvas.addEventListener('wheel', handleWheel);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', handleMouseUp);
     canvas.addEventListener('touchstart', handleTouchStart);
-    canvas.addEventListener('touchmove', handleTouchMove);
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd);
 
     return () => {
