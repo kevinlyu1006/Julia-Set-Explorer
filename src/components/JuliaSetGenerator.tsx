@@ -186,8 +186,8 @@ const JuliaSetGenerator: React.FC = () => {
         
         const panSpeed = 1.8;
         setCenter(prev => ({
-          x: prev.x - dx / canvas.width * 2 * panSpeed,
-          y: prev.y + dy / canvas.height * 2 * panSpeed
+          x: prev.x + dx / canvas.width * 2 * panSpeed,
+          y: prev.y - dy / canvas.height * 2 * panSpeed
         }));
         
         lastMousePos.current = { x: touch.clientX, y: touch.clientY };
