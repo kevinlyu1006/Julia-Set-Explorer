@@ -275,7 +275,7 @@ const JuliaSetGenerator: React.FC = () => {
       </div>
       
       <div className="flex-grow flex justify-center items-center p-4">
-        <div className="w-full max-w-6xl aspect-[16/9] relative">
+        <div className="w-full max-w-6xl aspect-[16/9] md:aspect-[16/9] relative">
           <canvas 
             ref={canvasRef} 
             className="w-full h-full"
