@@ -3,8 +3,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { fragmentShaderSource, vertexShaderSource } from './juliaSetShader';
 
-
-
 const JuliaSetGenerator: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGLRenderingContext | null>(null);
@@ -15,6 +13,7 @@ const JuliaSetGenerator: React.FC = () => {
   const [maxIterations, setMaxIterations] = useState(300);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -148,17 +147,9 @@ const JuliaSetGenerator: React.FC = () => {
 
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging.current) {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        
         const dx = (e.clientX - lastMousePos.current.x);
         const dy = (e.clientY - lastMousePos.current.y);
         
-        // Adjust panning speed based on zoom level
         const panSpeed = 2;
         setCenter(prev => ({
           x: prev.x + dx / canvas.width * 2 * panSpeed,
@@ -174,11 +165,75 @@ const JuliaSetGenerator: React.FC = () => {
       canvas.style.cursor = 'grab';
     };
 
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        isDragging.current = true;
+        lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      } else if (e.touches.length === 2) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+        setLastTouchDistance(distance);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && isDragging.current) {
+        const touch = e.touches[0];
+        const dx = (touch.clientX - lastMousePos.current.x);
+        const dy = (touch.clientY - lastMousePos.current.y);
+        
+        const panSpeed = 2 / zoom;
+        setCenter(prev => ({
+          x: prev.x - dx / canvas.width * 2 * panSpeed,
+          y: prev.y + dy / canvas.height * 2 * panSpeed
+        }));
+        
+        lastMousePos.current = { x: touch.clientX, y: touch.clientY };
+      } else if (e.touches.length === 2 && lastTouchDistance !== null) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const newDistance = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+        
+        const zoomFactor = newDistance / lastTouchDistance;
+        const newZoom = Math.max(1e-10, Math.min(zoom * zoomFactor, 1e10));
+
+        const zoomCenter = {
+          x: (touch1.clientX + touch2.clientX) / 2,
+          y: (touch1.clientY + touch2.clientY) / 2
+        };
+
+        const rect = canvas.getBoundingClientRect();
+        const zoomPoint = {
+          x: ((zoomCenter.x - rect.left) / canvas.width) * 2 - 1,
+          y: -(((zoomCenter.y - rect.top) / canvas.height) * 2 - 1)
+        };
+
+        const newCenter = {
+          x: center.x + (zoomPoint.x - center.x) * (1 - zoomFactor),
+          y: center.y + (zoomPoint.y - center.y) * (1 - zoomFactor)
+        };
+
+        setCenter(newCenter);
+        setZoom(newZoom);
+        setLastTouchDistance(newDistance);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isDragging.current = false;
+      setLastTouchDistance(null);
+    };
+
     canvas.addEventListener('wheel', handleWheel);
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', handleMouseUp);
+    canvas.addEventListener('touchstart', handleTouchStart);
+    canvas.addEventListener('touchmove', handleTouchMove);
+    canvas.addEventListener('touchend', handleTouchEnd);
 
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
@@ -186,6 +241,9 @@ const JuliaSetGenerator: React.FC = () => {
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('mouseleave', handleMouseUp);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
     };
   }, [zoom, center]);
 
@@ -239,7 +297,7 @@ const JuliaSetGenerator: React.FC = () => {
       </div>
       
       <div className="bg-gray-800 p-2 text-center text-xs text-gray-400">
-        Drag to pan, scroll to zoom
+        Drag to pan, scroll or pinch to zoom
       </div>
     </div>
   );
